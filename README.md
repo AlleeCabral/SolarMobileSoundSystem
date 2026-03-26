@@ -6,11 +6,14 @@ A Python rule engine that validates whether a set of electrical components (sola
 
 ## Files
 
-| File | Description |
+| File / Folder | Description |
 |---|---|
+| `app.py` | **Tkinter desktop UI** — the main file to run; pre-filled with your system |
 | `rules_engine.py` | Core rule engine — all electrical logic, data models, and failure explanations |
 | `simulate.py` | CLI runner — loads a config and prints the full simulation report |
-| `my_system.json` | Your system config (from the diagram) — edit this to simulate variants |
+| `my_system.json` | Reference JSON config (from the diagram) — values are mirrored in the UI |
+| `Theory/` | Electrical theory notes: energy budget formulas, series/parallel explained |
+| `ForMac/` | macOS distributable — py2app config + GitHub Actions workflow that auto-builds a `.dmg` |
 | `.venv/` | Python virtual environment — no external packages required (stdlib only) |
 
 ---
@@ -19,6 +22,7 @@ A Python rule engine that validates whether a set of electrical components (sola
 
 - Python 3.8 or newer
 - No external packages — uses only the Python standard library (`dataclasses`, `json`, `math`, `typing`, `sys`)
+- `tkinter` (included with the standard Python installer on Windows and macOS; on Linux install `python3-tk`)
 
 ---
 
@@ -47,12 +51,18 @@ You will see `(.venv)` appear in your prompt when it is active. No packages need
 
 ## Running the Simulator
 
-### Option 1 — Built-in example (your system from the diagram)
+### Option 1 — Desktop UI (recommended)
+```powershell
+python app.py
+```
+The window opens pre-filled with your system. Edit any field and click **▶ Simulate**. A colour-coded flowchart shows which components are failing.
+
+### Option 2 — Command line, built-in example
 ```powershell
 python simulate.py
 ```
 
-### Option 2 — Load your own JSON config
+### Option 3 — Command line with a JSON config file
 ```powershell
 python simulate.py my_system.json
 ```
@@ -61,14 +71,20 @@ python simulate.py my_system.json
 
 ## How to Simulate a Different Setup
 
+### Using the UI (easiest)
+1. Run `python app.py`.
+2. Edit any field directly in the window — battery capacity, panel count, load wattage, etc.
+3. Click **▶ Simulate**.
+4. The output box explains every pass/fail with a WHY and a FIX. The flowchart turns green (pass) or red (fail).
+
+### Using the JSON config (CLI)
 1. Open `my_system.json` in any text editor.
 2. Change any component value — for example:
    - Increase `battery.ah` from `150` to `200`
    - Change `pv_array.series_count` from `2` to `1`
    - Set `battery.v_nom` to `12` to test a 12 V system
    - Change `inverter.p_cont_w` to a lower value to test undersizing
-3. Save the file.
-4. Run `python simulate.py my_system.json`
+3. Save the file and run `python simulate.py my_system.json`.
 
 The simulator will tell you whether the system passes all electrical checks and, if not, exactly which rule failed and how to fix it.
 

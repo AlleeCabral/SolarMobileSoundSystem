@@ -24,8 +24,10 @@ The window opens pre-filled with your system from the diagram.
 │  ☀ Solar Panel  │  🔋 Battery      │  ⚡ Loads                 │
 │  ⚙ Controller   │  🔌 Inverter     │  🌤 Environment           │
 │                 │                 │  📋 Policy               │
-└─────────────────┴─────────────────┴──────────────────────────┘
-│               ▶  Simulate  (full-width button)               │
+└─────────────────┴─────────────────┴──────────────────────────┘│           System Flowchart (colour-coded after sim)          │
+│  Solar → Controller → Battery → Inverter → AC Loads         │
+│                     Battery → DC Loads (DC direct)           │
+└────────────────────────────────────────────────────────────┘│               ▶  Simulate  (full-width button)               │
 │               Output / Results text box                      │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -39,15 +41,25 @@ The window opens pre-filled with your system from the diagram.
 ### Column 2 — Battery + Inverter
 | Panel | What you can edit |
 |---|---|
-| **🔋 Battery** | Chemistry, nominal voltage, capacity (Ah), max depth of discharge, BMS continuous current, BMS peak current |
+| **🔋 Battery** | Chemistry, nominal voltage, capacity (Ah), max depth of discharge, BMS continuous current, BMS peak current, **number of batteries in parallel** (multiplies Ah and BMS ratings automatically) |
 | **🔌 Inverter** | DC input voltage, continuous power, surge power, efficiency, idle draw, pure sine checkbox |
 
 ### Column 3 — Loads + Environment + Policy
 | Panel | What you can edit |
 |---|---|
-| **⚡ Loads** | 5 fixed loads (one box each): power (W), hours/day, type (AC/DC), surge (W), required DC voltage |
+| **⚡ Loads** | Up to 10 loads: 5 fixed slots always visible + up to 5 more via **＋ Add Load** (remove with **✕ Remove**). Each slot: power (W), hours/day, type (AC/DC), surge (W), required DC voltage |
 | **🌤 Environment** | Peak sun hours, min temperature (°C), PV derate factor |
 | **📋 Policy** | Autonomy hours, energy margin, controller headroom, fuse factor |
+
+## Flowchart
+
+Between the config columns and the Simulate button, a live **system flowchart** shows the electrical topology:
+- Top row: Solar → Controller → Battery → Inverter → AC Loads
+- Bottom row: Battery → DC Loads (blue dashed arrow labelled "DC direct")
+
+After you click Simulate:
+- Each node turns **green** if all its parameters pass, or **red** if any parameter in that component fails.
+- Failing parameter labels inside the node also turn red, so you can see at a glance exactly which component needs attention.
 
 ---
 

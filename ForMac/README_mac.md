@@ -2,9 +2,16 @@
 
 This folder contains everything needed to produce a native macOS `.dmg` installer from the Python source.
 
+> **No Mac? No problem.**  
+> A GitHub Actions workflow (`.github/workflows/build_mac.yml`) automatically builds the `.dmg` on Apple hardware every time you push to `main`.  
+> Download it from the **Actions → Artifacts** tab at `https://github.com/AlleeCabral/SolarMobileSoundSystem/actions`  
+> or attach it to a permanent release by pushing a version tag: `git tag v1.0 && git push origin v1.0`
+
 ---
 
-## What you need (on a Mac)
+## What you need (to build locally on a Mac)
+
+> If you do not have a Mac, skip this section — use GitHub Actions instead (see note above).
 
 | Requirement | Notes |
 |---|---|
@@ -15,7 +22,7 @@ This folder contains everything needed to produce a native macOS `.dmg` installe
 
 ---
 
-## One-time setup
+## One-time setup (local Mac build)
 
 ```bash
 # 1. Install py2app into the project's venv (or system Python)
@@ -32,7 +39,7 @@ pip install py2app
 
 ---
 
-## Build the .dmg
+## Build the .dmg (local Mac build)
 
 ```bash
 cd ForMac
