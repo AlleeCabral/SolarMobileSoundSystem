@@ -1,0 +1,66 @@
+name: Build macOS .dmg
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:     # also lets you trigger it manually from GitHub
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      # ── 1. Check out source ──────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Install Python (includes Tkinter via python.org builds) ───────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ── 3. Install py2app ────────────────────────────────────────────────
+      - name: Install py2app
+        run: pip install py2app
+
+      # ── 4. Build the .app bundle ─────────────────────────────────────────
+      - name: Build .app
+        working-directory: ForMac
+        run: python setup.py py2app
+
+      # ── 5. Package into a .dmg ───────────────────────────────────────────
+      - name: Create .dmg
+        run: |
+          APP="ForMac/dist/Solar Sound System Simulator.app"
+          STAGING="ForMac/dist/dmg_staging"
+          DMG="ForMac/dist/SolarSoundSimulator.dmg"
+
+          mkdir -p "$STAGING"
+          cp -R "$APP" "$STAGING/"
+          ln -sf /Applications "$STAGING/Applications"
+
+          hdiutil create \
+            -volname "Solar Sound System Simulator" \
+            -srcfolder "$STAGING" \
+            -ov \
+            -format UDZO \
+            "$DMG"
+
+          rm -rf "$STAGING"
+
+      # ── 6. Upload the .dmg as a downloadable artifact ────────────────────
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SolarSoundSimulator-macOS
+          path: ForMac/dist/SolarSoundSimulator.dmg
+          retention-days: 30
+
+      # ── 7. Attach to a GitHub Release if this push was a version tag ─────
+      #       Push a tag like:  git tag v1.0  &&  git push origin v1.0
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ForMac/dist/SolarSoundSimulator.dmg

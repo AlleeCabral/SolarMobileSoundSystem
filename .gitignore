@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+
+# py2app build output
+ForMac/build/
+ForMac/dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

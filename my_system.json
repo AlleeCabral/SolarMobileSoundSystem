@@ -1,0 +1,64 @@
+{
+  "loads": [
+    {"name": "XDJ-XZ",          "power_w": 30,  "hours_per_day": 8, "load_type": "AC", "surge_w": 80},
+    {"name": "Adam T5V",         "power_w": 30,  "hours_per_day": 8, "load_type": "AC", "surge_w": 70},
+    {"name": "Phones x2",        "power_w": 20,  "hours_per_day": 8, "load_type": "AC", "surge_w": 0},
+    {"name": "LED lights",       "power_w": 25,  "hours_per_day": 8, "load_type": "AC", "surge_w": 0},
+    {
+      "name": "Amp RUIZHI 2.1 (corrected +100W)",
+      "power_w": 200,
+      "hours_per_day": 8,
+      "load_type": "DC",
+      "required_voltage": 24,
+      "surge_w": 260
+    }
+  ],
+  "battery": {
+    "chemistry": "LiFePO4",
+    "v_nom": 24,
+    "ah": 150,
+    "dod_max": 0.85,
+    "bms_cont_a": 150,
+    "bms_peak_a": 250
+  },
+  "inverter": {
+    "v_in": 24,
+    "p_cont_w": 800,
+    "p_surge_w": 1600,
+    "eff": 0.90,
+    "idle_w": 10,
+    "pure_sine": true
+  },
+  "pv_array": {
+    "panel": {
+      "p_stc_w": 400,
+      "voc_stc": 22,
+      "vmp": 18.5,
+      "isc": 22.5,
+      "imp": 21.6,
+      "beta_voc_pct_per_c": -0.30
+    },
+    "series_count": 2,
+    "parallel_count": 2
+  },
+  "controller": {
+    "type_": "MPPT",
+    "battery_voltages_supported": [12, 24],
+    "pv_max_voc": 100,
+    "charge_a_max": 60,
+    "pv_power_limit_by_batt_v": {"12": 800, "24": 1600},
+    "requires_vmp_margin_v": 3.0
+  },
+  "environment": {
+    "psh": 5.0,
+    "t_min_c": 0,
+    "pv_derate": 0.75
+  },
+  "policy": {
+    "autonomy_hours": 8,
+    "mode": "balanced_low_cost",
+    "energy_margin": 1.15,
+    "controller_headroom": 1.10,
+    "fuse_factor": 1.25
+  }
+}
