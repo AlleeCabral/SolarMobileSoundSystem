@@ -40,7 +40,7 @@ _FC_NODES = [
     },
     {
         "id":    "ctrl",
-        "title": "Controller",
+        "title": "Charge Controller",
         "params": [
             ("ctrl.type_",        "Type"),
             ("ctrl.pv_max_voc",   "Max Voc V"),
@@ -266,7 +266,7 @@ class App(tk.Tk):
             _add_field(lf, label, self._sv(key), row)
 
     def _build_controller(self, parent):
-        lf = self._lf(parent, "⚙  Controller")
+        lf = self._lf(parent, "⚙  Charge Controller")
         for row, (key, label) in enumerate([
             ("ctrl.type_",        "Type (MPPT/PWM)"),
             ("ctrl.pv_max_voc",   "Max PV Voc (V)"),
@@ -653,7 +653,6 @@ class App(tk.Tk):
         px       = 10
         aw       = 22          # horizontal gap between boxes (arrow space)
         title_h  = 18
-        param_h  = 10
         divider  = title_h + 2
         top_h    = 108          # height of main bus row
         bot_h    = 82           # height of DC-direct row
@@ -663,6 +662,9 @@ class App(tk.Tk):
         n_top    = 5            # Solar, Controller, Battery, Inverter, AC Loads
         avail    = W - 2 * px - (n_top - 1) * aw
         bw       = max(78, avail // n_top)
+        pf_size  = max(7, min(11, bw // 12))   # param font scales with box width
+        param_h  = int(pf_size * 1.9)           # real pixel height for bold font
+        max_chars = max(10, bw // (pf_size - 1)) # chars before truncation
         total    = n_top * bw + (n_top - 1) * aw
         sx       = px + max(0, (W - 2 * px - total) // 2)
 
@@ -684,12 +686,12 @@ class App(tk.Tk):
                 var = self._vars.get(pk)
                 val = var.get() if var else "\u2014"
                 row = f"{lbl}: {val}"
-                if len(row) > 18:
-                    row = row[:17] + "\u2026"
+                if len(row) > max_chars:
+                    row = row[:max_chars - 1] + "\u2026"
                 col = ("#c0392b" if (simulated and pk in failing_params)
                        else "#333333")
                 c.create_text(cxx, ry, text=row,
-                              font=("Courier", 7), fill=col, anchor="n")
+                              font=("Courier", pf_size, "bold"), fill=col, anchor="n")
                 ry += param_h
             return cxx, y1
 
@@ -713,7 +715,7 @@ class App(tk.Tk):
              ["P_stc W", "Voc STC", "Vmp", "Beta %/C", "Series", "Parallel"],
              ["panel.p_stc_w", "panel.voc_stc", "panel.vmp",
               "panel.beta_voc_pct_per_c", "panel.series_count", "panel.parallel_count"]),
-            ("ctrl",     "\u26d9  Controller",
+            ("ctrl",     "\u26d9  Charge Controller",
              ["Type", "Max Voc V", "Max chg A", "Batt V", "Vmp margin"],
              ["ctrl.type_", "ctrl.pv_max_voc", "ctrl.charge_a_max",
               "ctrl.batt_v", "ctrl.vmp_margin"]),
@@ -750,10 +752,12 @@ class App(tk.Tk):
                             continue
                         name = self._vars[f"load{li}.name"].get() or f"Load {li+1}"
                         pw   = float(self._vars[f"load{li}.power_w"].get())
-                        txt  = f"{name[:12]}: {pw:.0f}W"
+                        txt  = f"{name}: {pw:.0f}W"
+                        if len(txt) > max_chars:
+                            txt = txt[:max_chars - 1] + "\u2026"
                         if ry + param_h > y1 - 2:
                             break
-                        c.create_text(cxx, ry, text=txt, font=("Courier", 7),
+                        c.create_text(cxx, ry, text=txt, font=("Courier", pf_size, "bold"),
                                       fill="#333333", anchor="n")
                         ry += param_h
                 except Exception:
@@ -798,10 +802,12 @@ class App(tk.Tk):
                 name = self._vars[f"load{li}.name"].get() or f"Load {li+1}"
                 pw   = float(self._vars[f"load{li}.power_w"].get())
                 rv   = self._vars[f"load{li}.req_v"].get()
-                txt  = f"{name[:10]}: {pw:.0f}W @{rv}V"
+                txt  = f"{name}: {pw:.0f}W @{rv}V"
+                if len(txt) > max_chars:
+                    txt = txt[:max_chars - 1] + "\u2026"
                 if ry + param_h > dc_y1 - 2:
                     break
-                c.create_text(dc_cx, ry, text=txt, font=("Courier", 7),
+                c.create_text(dc_cx, ry, text=txt, font=("Courier", pf_size, "bold"),
                               fill="#333333", anchor="n")
                 ry += param_h
         except Exception:

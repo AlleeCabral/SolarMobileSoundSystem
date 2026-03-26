@@ -129,14 +129,14 @@ def builtin_example() -> SystemConfig:
     ]
     battery  = Battery("LiFePO4", v_nom=24, ah=150, dod_max=0.85, bms_cont_a=150, bms_peak_a=250)
     inverter = Inverter(v_in=24, p_cont_w=800, p_surge_w=1600, eff=0.90, idle_w=10, pure_sine=True)
-    panel    = Panel(p_stc_w=400, voc_stc=22, vmp=18.5, isc=22.5, imp=21.6, beta_voc_pct_per_c=-0.30)
-    pv_array = PVArray(panel=panel, series_count=2, parallel_count=2)
+    panel    = Panel(p_stc_w=450, voc_stc=39.30, vmp=33, isc=15.64, imp=13.71, beta_voc_pct_per_c=-0.26)
+    pv_array = PVArray(panel=panel, series_count=1, parallel_count=2)
     controller = Controller(
-        type_="MPPT",
-        battery_voltages_supported=[12.0, 24.0],
-        pv_max_voc=100,
-        charge_a_max=60,
-        pv_power_limit_by_batt_v={12.0: 800.0, 24.0: 1600.0},
+        type_="PWM",
+        battery_voltages_supported=[24.0],
+        pv_max_voc=50,
+        charge_a_max=40,
+        pv_power_limit_by_batt_v={12.0: 600.0, 24.0: 1200.0},
         requires_vmp_margin_v=3.0,
     )
     environment = Environment(psh=5.0, t_min_c=0, pv_derate=0.75)

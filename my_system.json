@@ -31,22 +31,22 @@
   },
   "pv_array": {
     "panel": {
-      "p_stc_w": 400,
-      "voc_stc": 22,
-      "vmp": 18.5,
-      "isc": 22.5,
-      "imp": 21.6,
-      "beta_voc_pct_per_c": -0.30
+      "p_stc_w": 450,
+      "voc_stc": 39.30,
+      "vmp": 33,
+      "isc": 15.64,
+      "imp": 13.71,
+      "beta_voc_pct_per_c": -0.26
     },
-    "series_count": 2,
+    "series_count": 1,
     "parallel_count": 2
   },
   "controller": {
-    "type_": "MPPT",
-    "battery_voltages_supported": [12, 24],
-    "pv_max_voc": 100,
-    "charge_a_max": 60,
-    "pv_power_limit_by_batt_v": {"12": 800, "24": 1600},
+    "type_": "PWM",
+    "battery_voltages_supported": [24],
+    "pv_max_voc": 50,
+    "charge_a_max": 40,
+    "pv_power_limit_by_batt_v": {"12": 600, "24": 1200},
     "requires_vmp_margin_v": 3.0
   },
   "environment": {
