@@ -133,7 +133,7 @@ def builtin_example() -> SystemConfig:
     pv_array = PVArray(panel=panel, series_count=1, parallel_count=2)
     controller = Controller(
         type_="PWM",
-        battery_voltages_supported=[24.0],
+        battery_voltages_supported=[12.0, 24.0],
         pv_max_voc=50,
         charge_a_max=40,
         pv_power_limit_by_batt_v={12.0: 600.0, 24.0: 1200.0},

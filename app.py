@@ -5,9 +5,9 @@ Run:  python app.py
 """
 
 from __future__ import annotations
-import sys, os
+import sys, os, json
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, simpledialog, messagebox
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -18,8 +18,8 @@ from rules_engine import (
 )
 from simulate import builtin_example
 
-
 MAX_LOADS = 10   # total load slots (5 built-in + 5 user-added)
+SAVED_CONFIGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_configs.json")
 
 # ─────────────────────────────────────────────
 # Flowchart node definitions & failure mapping
@@ -62,7 +62,7 @@ _FC_NODES = [
             ("batt.bms_cont_a",     "BMS cont A"),
             ("batt.bms_peak_a",     "BMS peak A"),
         ],
-        "fail_codes": {"battery_ah", "bms_cont", "bms_peak", "ctrl_batt_v"},
+        "fail_codes": {"battery_ah", "bms_cont", "bms_peak", "ctrl_batt_v", "battery_bus_mismatch"},
     },
     {
         "id":    "inverter",
@@ -103,6 +103,7 @@ _FAIL_PARAM_MAP: dict = {
                          "panel.parallel_count", "ctrl.pv_lim_12", "ctrl.pv_lim_24"},
     "pv_undersized":    {"panel.p_stc_w", "panel.series_count",
                          "panel.parallel_count", "env.psh", "env.pv_derate"},
+    "battery_bus_mismatch": {"batt.v_nom", "ctrl.batt_v", "inv.v_in"},
 }
 
 
@@ -135,8 +136,11 @@ class App(tk.Tk):
         self._load_frames: list = []  # LabelFrame refs for load sub-panels
         self._fc_result = None        # last simulation result for flowchart redraws
         self._fc_canvas = None
+        self._last_result = None      # result dict of latest simulation
+        self._save_btn = None         # Save button reference
         self._build_ui()
         self._populate(builtin_example())
+        self._refresh_saved_list()
 
     # ─────────────────────────────────────────
     # Variable factory helpers
@@ -163,8 +167,53 @@ class App(tk.Tk):
     # UI construction
     # ─────────────────────────────────────────
     def _build_ui(self):
+        # ── root layout: narrow saved-configs sidebar on left, main content on right ──
+        root_pane = tk.Frame(self)
+        root_pane.pack(fill="both", expand=True)
+
+        # ── Saved Configurations sidebar ───────────────────────────────
+        sidebar = tk.LabelFrame(root_pane, text="💾  Saved Configurations",
+                                font=("TkDefaultFont", 9, "bold"), padx=4, pady=4)
+        sidebar.pack(side="left", fill="y", padx=(6, 0), pady=6)
+
+        # ── scrollable config list ─────────────────────────────────────────
+        list_frame = tk.Frame(sidebar)
+        list_frame.pack(side="top", fill="both", expand=True)
+
+        sb_canvas = tk.Canvas(list_frame, width=148, borderwidth=0, highlightthickness=0)
+        sb_vsb = tk.Scrollbar(list_frame, orient="vertical", command=sb_canvas.yview)
+        sb_canvas.configure(yscrollcommand=sb_vsb.set)
+        sb_vsb.pack(side="right", fill="y")
+        sb_canvas.pack(side="left", fill="both", expand=True)
+
+        self._sb_inner = tk.Frame(sb_canvas)
+        self._sb_win = sb_canvas.create_window((0, 0), window=self._sb_inner, anchor="nw")
+        self._sb_inner.bind("<Configure>",
+            lambda e: sb_canvas.configure(scrollregion=sb_canvas.bbox("all")))
+        sb_canvas.bind("<Configure>",
+            lambda e: sb_canvas.itemconfig(self._sb_win, width=e.width))
+        self._sb_canvas = sb_canvas
+
+        # ── Notes / URLs area ─────────────────────────────────────────────
+        notes_lf = tk.LabelFrame(sidebar, text="\U0001f4dd Notes / URLs",
+                                  font=("TkDefaultFont", 8, "bold"), padx=2, pady=2)
+        notes_lf.pack(side="bottom", fill="x", padx=0, pady=(4, 0))
+        _notes_row = tk.Frame(notes_lf)
+        _notes_row.pack(fill="both", expand=True)
+        self._notes_txt = tk.Text(_notes_row, height=5, width=18,
+                                   font=("Courier", 7), wrap="word", relief="sunken")
+        _notes_sbr = tk.Scrollbar(_notes_row, orient="vertical",
+                                   command=self._notes_txt.yview)
+        self._notes_txt.configure(yscrollcommand=_notes_sbr.set)
+        _notes_sbr.pack(side="right", fill="y")
+        self._notes_txt.pack(side="left", fill="both", expand=True)
+
+        # ── main content area (scrollable) ─────────────────────────────
+        main_area = tk.Frame(root_pane)
+        main_area.pack(side="left", fill="both", expand=True)
+
         # ── scrollable panel area ──────────────────────────────────────
-        outer = tk.Frame(self)
+        outer = tk.Frame(main_area)
         outer.pack(fill="both", expand=True)
 
         canvas = tk.Canvas(outer, borderwidth=0, highlightthickness=0)
@@ -209,7 +258,7 @@ class App(tk.Tk):
 
         # ── Flowchart canvas ───────────────────────────────────────────
         fc_lf = tk.LabelFrame(
-            self,
+            main_area,
             text=("System Flowchart   "
                   "[ gray = not yet simulated  |  green = PASS  |  red = FAIL ]"),
             font=("TkDefaultFont", 8), padx=4, pady=4)
@@ -222,9 +271,11 @@ class App(tk.Tk):
             "<Configure>",
             lambda e: self.after_idle(lambda: self._redraw_flowchart(self._fc_result)))
 
-        # ── Simulate button ────────────────────────────────────────────
-        btn_bar = tk.Frame(self, pady=6)
+        # ── Simulate + Save buttons ────────────────────────────────────
+        btn_bar = tk.Frame(main_area, pady=6)
         btn_bar.pack(fill="x", padx=10)
+        btn_bar.columnconfigure(0, weight=3)
+        btn_bar.columnconfigure(1, weight=1)
         tk.Button(
             btn_bar, text="▶   Simulate",
             command=self._simulate,
@@ -232,10 +283,20 @@ class App(tk.Tk):
             bg="#2d7d46", fg="white",
             activebackground="#1e5c33", activeforeground="white",
             relief="flat", padx=20, pady=8,
-        ).pack(fill="x")
+        ).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self._save_btn = tk.Button(
+            btn_bar, text="💾  Save",
+            command=self._save_config,
+            font=("TkDefaultFont", 11, "bold"),
+            bg="#5a5a8a", fg="white",
+            activebackground="#3a3a6a", activeforeground="white",
+            relief="flat", padx=12, pady=8,
+            state="disabled",
+        )
+        self._save_btn.grid(row=0, column=1, sticky="ew")
 
         # ── Output text box ─────────────────────────────────────────────
-        out_bar = tk.Frame(self)
+        out_bar = tk.Frame(main_area)
         out_bar.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         self._out = scrolledtext.ScrolledText(
@@ -282,14 +343,20 @@ class App(tk.Tk):
         lf = self._lf(parent, "🔋  Battery")
         for row, (key, label) in enumerate([
             ("batt.chemistry",      "Chemistry"),
-            ("batt.v_nom",          "Voltage nom (V)"),
+            ("batt.v_nom",          "Voltage nom (V, each)"),
             ("batt.ah",             "Capacity Ah (each)"),
             ("batt.dod_max",        "Max DoD (0–1)"),
             ("batt.bms_cont_a",     "BMS cont A (each)"),
             ("batt.bms_peak_a",     "BMS peak A (each)"),
-            ("batt.parallel_count", "# batteries (∥)"),
+            ("batt.parallel_count", "# batteries"),
         ]):
             _add_field(lf, label, self._sv(key), row)
+        # Wiring selector — only matters when # batteries > 1
+        wiring_var = self._sv("batt.wiring", "parallel")
+        tk.Label(lf, text="Wiring (if > 1)", anchor="w").grid(
+            row=7, column=0, sticky="w", padx=4, pady=2)
+        tk.OptionMenu(lf, wiring_var, "parallel", "series").grid(
+            row=7, column=1, sticky="ew", padx=4, pady=2)
 
     def _build_inverter(self, parent):
         lf = self._lf(parent, "🔌  Inverter")
@@ -423,6 +490,7 @@ class App(tk.Tk):
         self._vars["batt.bms_cont_a"].set(b.bms_cont_a)
         self._vars["batt.bms_peak_a"].set(b.bms_peak_a)
         self._vars["batt.parallel_count"].set(1)  # default single battery
+        self._vars["batt.wiring"].set("parallel")  # default wiring
 
         if cfg.inverter:
             iv = cfg.inverter
@@ -523,13 +591,26 @@ class App(tk.Tk):
         )
 
         n_batt = max(1, i("batt.parallel_count"))
+        wiring = s("batt.wiring").lower()
+        if wiring == "series":
+            # Series: voltage multiplies, Ah and BMS current stay per-string
+            eff_v_nom  = f("batt.v_nom") * n_batt
+            eff_ah     = f("batt.ah")
+            eff_cont_a = f("batt.bms_cont_a")
+            eff_peak_a = f("batt.bms_peak_a")
+        else:  # parallel (default)
+            # Parallel: voltage stays, Ah and BMS current multiply
+            eff_v_nom  = f("batt.v_nom")
+            eff_ah     = f("batt.ah") * n_batt
+            eff_cont_a = f("batt.bms_cont_a") * n_batt
+            eff_peak_a = f("batt.bms_peak_a") * n_batt
         battery = Battery(
             chemistry=s("batt.chemistry"),
-            v_nom=f("batt.v_nom"),
-            ah=f("batt.ah") * n_batt,
+            v_nom=eff_v_nom,
+            ah=eff_ah,
             dod_max=f("batt.dod_max"),
-            bms_cont_a=f("batt.bms_cont_a") * n_batt,
-            bms_peak_a=f("batt.bms_peak_a") * n_batt,
+            bms_cont_a=eff_cont_a,
+            bms_peak_a=eff_peak_a,
         )
 
         inv_keys = ["inv.v_in", "inv.p_cont_w", "inv.p_surge_w", "inv.eff", "inv.idle_w"]
@@ -602,6 +683,127 @@ class App(tk.Tk):
         self._out.configure(state="normal")
         self._out.delete("1.0", "end")
         self._out.configure(state="disabled")
+
+    # ─────────────────────────────────────────
+    # Saved Configurations
+    # ─────────────────────────────────────────
+    def _cfg_to_dict(self) -> dict:
+        """Snapshot every UI var into a plain dict suitable for JSON."""
+        snapshot: dict = {}
+        for key, var in self._vars.items():
+            snapshot[key] = var.get()
+        return snapshot
+
+    def _load_saved_file(self) -> dict:
+        if not os.path.exists(SAVED_CONFIGS_PATH):
+            return {}
+        try:
+            with open(SAVED_CONFIGS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _write_saved_file(self, data: dict):
+        with open(SAVED_CONFIGS_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+    def _refresh_saved_list(self):
+        """Rebuild the sidebar button list from saved_configs.json."""
+        for w in self._sb_inner.winfo_children():
+            w.destroy()
+        data = self._load_saved_file()
+        if not data:
+            tk.Label(self._sb_inner, text="(none)", font=("TkDefaultFont", 8),
+                     fg="#888888").pack(anchor="w", padx=4, pady=2)
+            return
+        for name in sorted(data.keys()):
+            row = tk.Frame(self._sb_inner, bg="#f0f4ff")
+            row.pack(fill="x", padx=2, pady=1)
+            tk.Button(
+                row, text=name,
+                font=("TkDefaultFont", 8), anchor="w",
+                relief="flat", bg="#f0f4ff", activebackground="#d0d8ff",
+                command=lambda n=name: self._load_saved_config(n),
+            ).pack(side="left", fill="x", expand=True)
+            tk.Button(
+                row, text="×",
+                font=("TkDefaultFont", 8, "bold"),
+                relief="flat", bg="#f0f4ff", fg="#c0392b",
+                activebackground="#fde8e8", activeforeground="#c0392b",
+                width=2,
+                command=lambda n=name: self._delete_saved_config(n),
+            ).pack(side="right")
+        self._sb_canvas.configure(scrollregion=self._sb_canvas.bbox("all"))
+
+    def _load_saved_config(self, name: str):
+        """Fill all UI fields from a saved config entry."""
+        data = self._load_saved_file()
+        if name not in data:
+            messagebox.showerror("Not found", f"Config '{name}' not found.")
+            return
+        snapshot = data[name]
+        for key, value in snapshot.items():
+            if key in self._vars:
+                self._vars[key].set(value)
+        # Sync load frame titles and visibility
+        for li in range(MAX_LOADS):
+            name_key = f"load{li}.name"
+            pw_key   = f"load{li}.power_w"
+            lbl = snapshot.get(name_key, "")
+            self._load_frames[li].config(text=lbl or f"Load {li+1}")
+            has_data = bool(lbl or snapshot.get(pw_key, ""))
+            if li >= 5:
+                if has_data and li in self._hidden_loads:
+                    self._hidden_loads.discard(li)
+                    self._load_frames[li].pack(fill="x", pady=2, padx=2)
+                elif not has_data and li not in self._hidden_loads:
+                    self._load_frames[li].pack_forget()
+                    self._hidden_loads.add(li)
+        if self._hidden_loads:
+            self._add_load_btn.config(state="normal", text="＋ Add Load")
+        else:
+            self._add_load_btn.config(state="disabled",
+                                     text=f"Max {MAX_LOADS} loads reached")
+        # Restore notes / URLs
+        notes = snapshot.get("_notes", "")
+        self._notes_txt.delete("1.0", "end")
+        if notes:
+            self._notes_txt.insert("1.0", notes)
+        # Reset sim state — loaded config not yet re-simulated
+        self._last_result = None
+        self._save_btn.config(state="disabled")
+
+    def _save_config(self):
+        """Prompt for a name and persist the current PASS configuration."""
+        if not self._last_result or self._last_result.get("status") != "PASS":
+            messagebox.showwarning("Save", "Only passing configurations can be saved.\nRun Simulate first.")
+            return
+        name = simpledialog.askstring("Save Configuration",
+                                      "Enter a name for this configuration:",
+                                      parent=self)
+        if not name or not name.strip():
+            return
+        name = name.strip()
+        data = self._load_saved_file()
+        if name in data:
+            if not messagebox.askyesno("Overwrite?",
+                                       f"'{name}' already exists. Overwrite?"):
+                return
+        snapshot = self._cfg_to_dict()
+        snapshot["_notes"] = self._notes_txt.get("1.0", "end-1c")
+        data[name] = snapshot
+        self._write_saved_file(data)
+        self._refresh_saved_list()
+        messagebox.showinfo("Saved", f"Configuration '{name}' saved.")
+
+    def _delete_saved_config(self, name: str):
+        if not messagebox.askyesno("Delete", f"Delete '{name}'?"):
+            return
+        data = self._load_saved_file()
+        data.pop(name, None)
+        self._write_saved_file(data)
+        self._refresh_saved_list()
 
     # ─────────────────────────────────────────
     # Flowchart
@@ -720,9 +922,9 @@ class App(tk.Tk):
              ["ctrl.type_", "ctrl.pv_max_voc", "ctrl.charge_a_max",
               "ctrl.batt_v", "ctrl.vmp_margin"]),
             ("battery",  "\U0001f50b Battery",
-             ["Chemistry", "Voltage V", "Ah each", "# parallel", "Max DoD", "BMS cont A", "BMS peak A"],
+             ["Chemistry", "Voltage V", "Ah each", "# batteries", "Wiring", "Max DoD", "BMS cont A", "BMS peak A"],
              ["batt.chemistry", "batt.v_nom", "batt.ah",
-              "batt.parallel_count", "batt.dod_max", "batt.bms_cont_a", "batt.bms_peak_a"]),
+              "batt.parallel_count", "batt.wiring", "batt.dod_max", "batt.bms_cont_a", "batt.bms_peak_a"]),
             ("inverter", "\U0001f50c Inverter",
              ["V in", "P cont W", "P surge W", "Efficiency", "Idle W"],
              ["inv.v_in", "inv.p_cont_w", "inv.p_surge_w", "inv.eff", "inv.idle_w"]),
@@ -833,7 +1035,13 @@ class App(tk.Tk):
 
         # update flowchart before writing text output
         self._fc_result = result
+        self._last_result = result
         self._redraw_flowchart(result)
+        # Enable Save only on full PASS
+        if result.get("status") == "PASS":
+            self._save_btn.config(state="normal")
+        else:
+            self._save_btn.config(state="disabled")
 
         m = result["metrics"]
         arr = cfg.pv_array
@@ -863,6 +1071,11 @@ class App(tk.Tk):
         self._write(f"    Min Ah needed : {m['ah_req']:>7.1f} Ah   installed: {cfg.battery.ah:.1f} Ah\n")
         self._write(f"    Continuous    : {m['i_bus_cont_a']:>7.2f} A\n")
         self._write(f"    Surge         : {m['i_bus_surge_a']:>7.2f} A\n")
+        usable_wh  = cfg.battery.ah * cfg.battery.v_nom * cfg.battery.dod_max
+        load_w     = m['e_bat_day_wh'] / max(0.01, cfg.policy.autonomy_hours)
+        autonomy_h = usable_wh / load_w if load_w > 0 else 0.0
+        self._write(f"    Autonomy (no solar): {autonomy_h:>5.1f} h  "
+                    f"({usable_wh:.0f} Wh usable \u00f7 {load_w:.0f} W)\n")
 
         # ── Inverter ────────────────────────────────
         if cfg.inverter:
@@ -875,6 +1088,11 @@ class App(tk.Tk):
         # ── PV ──────────────────────────────────────
         self._write("\n  PV ARRAY\n", "head")
         self._write(f"    Config         : {arr.series_count}S × {arr.parallel_count}P  =  {m['pv_installed_w']:.0f} W installed\n")
+        if (cfg.controller.type_.upper() == "PWM"
+                and m.get("pv_effective_w", m["pv_installed_w"]) < m["pv_installed_w"] - 1):
+            self._write(
+                f"    PWM effective  : {m['pv_effective_w']:.0f} W  "
+                f"(Isc × charge V — PWM clips panel voltage to battery voltage)\n", "warn")
         self._write(f"    Min needed     : {m['p_pv_min_w']:.1f} W\n")
         self._write(f"    Cold Voc       : {m['voc_cold_string_v']:.2f} V  (controller max: {cfg.controller.pv_max_voc} V)\n")
         self._write(f"    Charge current : {m['i_charge_est_a']:.2f} A  (controller max: {cfg.controller.charge_a_max} A)\n")

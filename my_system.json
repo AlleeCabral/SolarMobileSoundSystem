@@ -43,7 +43,7 @@
   },
   "controller": {
     "type_": "PWM",
-    "battery_voltages_supported": [24],
+    "battery_voltages_supported": [12, 24],
     "pv_max_voc": 50,
     "charge_a_max": 40,
     "pv_power_limit_by_batt_v": {"12": 600, "24": 1200},

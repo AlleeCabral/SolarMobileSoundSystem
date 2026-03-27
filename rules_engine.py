@@ -106,6 +106,14 @@ FAIL_EXPLANATIONS = {
         "FIX: Add more panels (parallel strings) or increase PSH assumption (better placement),\n"
         "     or reduce daily load."
     ),
+    "battery_bus_mismatch": (
+        "WHY: The battery's nominal voltage ({batt_v:.0f} V) does not match the system bus\n"
+        "     voltage ({bus_v:.0f} V) required by your loads, inverter, and/or controller.\n"
+        "     A mismatched battery will either under-voltage the bus or be charged beyond\n"
+        "     its design limits — both shorten battery life or cause sudden shut-down.\n"
+        "FIX: Set the battery to {bus_v:.0f} V to match the bus, OR reconfigure loads and\n"
+        "     inverter to match the {batt_v:.0f} V battery."
+    ),
 }
 
 
@@ -340,6 +348,13 @@ class RuleEngine:
                     i_surge=i_surge, bms_peak=batt.bms_peak_a)
             )
 
+        if abs(batt.v_nom - bus_v) > 0.5:
+            self._fail(
+                "battery_bus_mismatch",
+                f"Battery nominal ({batt.v_nom:.0f} V) does not match bus voltage ({bus_v:.0f} V).",
+                FAIL_EXPLANATIONS["battery_bus_mismatch"].format(batt_v=batt.v_nom, bus_v=bus_v)
+            )
+
         return {
             "ah_req": round(ah_req, 1),
             "p_bus_cont_w": round(p_bus_cont, 1),
@@ -403,7 +418,7 @@ class RuleEngine:
         if voc_cold_string >= safe_voc_limit:
             self._fail(
                 "voc_cold",
-                f"PV cold Voc ({voc_cold_string:.1f} V) exceeds safe MPPT input ({safe_voc_limit:.1f} V).",
+                f"PV cold Voc ({voc_cold_string:.1f} V) exceeds safe controller input ({safe_voc_limit:.1f} V).",
                 FAIL_EXPLANATIONS["voc_cold"].format(voc_cold=voc_cold_string, safe_v=safe_voc_limit)
             )
 
@@ -428,12 +443,16 @@ class RuleEngine:
                         margin=ctrl.requires_vmp_margin_v)
                 )
 
-        # charge current
-        i_charge_est = arr.p_total_w / v_charge
+        # charge current — PWM connects panel directly (current ≈ Isc); MPPT performs power tracking
+        if ctrl.type_.upper() == "PWM":
+            i_charge_est = arr.isc_array          # panel Isc at battery voltage (conservative)
+        else:
+            i_charge_est = arr.p_total_w / v_charge  # MPPT extracts full panel power
+
         if i_charge_est > ctrl.charge_a_max:
             self._fail(
                 "ctrl_current",
-                f"MPPT output current ({i_charge_est:.1f} A) exceeds controller max ({ctrl.charge_a_max:.1f} A).",
+                f"Charge current ({i_charge_est:.1f} A) exceeds controller max ({ctrl.charge_a_max:.1f} A).",
                 FAIL_EXPLANATIONS["ctrl_current"].format(
                     i_charge=i_charge_est, ctrl_max=ctrl.charge_a_max)
             )
@@ -448,13 +467,14 @@ class RuleEngine:
                     pv_w=arr.p_total_w, bus_v=bus_v, limit_w=p_limit)
             )
 
-        # PV size adequacy
-        if arr.p_total_w < p_pv_min:
+        # PV size adequacy — PWM effective power is limited by Isc × charge voltage (voltage clipping)
+        pv_effective_w = (arr.isc_array * v_charge) if ctrl.type_.upper() == "PWM" else arr.p_total_w
+        if pv_effective_w < p_pv_min:
             self._fail(
                 "pv_undersized",
-                f"PV array ({arr.p_total_w:.0f} W) won't cover daily energy (need {p_pv_min:.0f} W minimum).",
+                f"PV effective output ({pv_effective_w:.0f} W) won't cover daily energy (need {p_pv_min:.0f} W minimum).",
                 FAIL_EXPLANATIONS["pv_undersized"].format(
-                    pv_w=arr.p_total_w, pv_min=p_pv_min,
+                    pv_w=pv_effective_w, pv_min=p_pv_min,
                     psh=env.psh, derate=env.pv_derate)
             )
 
@@ -463,6 +483,7 @@ class RuleEngine:
             "voc_cold_string_v": round(voc_cold_string, 2),
             "i_charge_est_a": round(i_charge_est, 2),
             "pv_installed_w": arr.p_total_w,
+            "pv_effective_w": round(pv_effective_w, 1),
         }
 
     # ── 6. PROTECTION SIZING ────────────────────────────────────────────────
